@@ -4,6 +4,9 @@
   "description": "Single-page construction expense tracker on Netlify (Blobs + Resend). No database.",
   "type": "module",
   "private": true,
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "dev": "netlify dev",
     "test": "vitest run",

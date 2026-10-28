@@ -9,12 +9,13 @@ import {
   totalSpent,
   spentThisMonth,
   outstandingTotal,
+  budgetRemaining,
   lastN,
   buildEmailHtml,
   formatINR,
 } from '../../js/lib/calc.js';
 
-const VALID_MODES = ['cash', 'UPI', 'bank'];
+const VALID_MODES = ['cash', 'UPI', 'bank', 'Cash', 'Bank', 'Online', 'Other'];
 
 function sanitizeExpense(e) {
   return {
@@ -24,6 +25,7 @@ function sanitizeExpense(e) {
     category: String(e.category || '').trim(),
     description: String(e.description || '').trim(),
     paymentMode: VALID_MODES.includes(e.paymentMode) ? e.paymentMode : 'UPI',
+    reference: String(e.reference || '').trim(),
   };
 }
 
@@ -46,6 +48,8 @@ async function sendEmail(data, expense) {
     month: spentThisMonth(data.expenses, new Date()),
     vendorCount: data.vendors.length,
     outstanding: outstandingTotal(data.vendors, data.expenses),
+    budget: data.settings?.budget || 0,
+    remaining: budgetRemaining(data.settings?.budget || 0, data.expenses),
   };
   const html = buildEmailHtml({
     expense,

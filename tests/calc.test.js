@@ -4,7 +4,13 @@ import {
   formatINR,
   totalSpent,
   spentThisMonth,
+  spentToday,
   vendorPaid,
+  vendorTotals,
+  categoryBudgetRows,
+  paymentModeTotals,
+  monthlyReport,
+  filterSortExpenses,
   lumpsumBalance,
   percentComplete,
   outstandingTotal,
@@ -62,6 +68,26 @@ describe('spentThisMonth (FR-10)', () => {
     const ref = new Date('2026-01-01T00:00:00');
     expect(spentThisMonth(expenses, ref)).toBe(0);
   });
+  it('defaults to the current month when no ref is passed (dashboard call)', () => {
+    // Regression: dashboard calls spentThisMonth(expenses) with no date.
+    // new Date(undefined) is Invalid Date and silently returned 0 before the fix.
+    const now = new Date();
+    const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-15`;
+    expect(spentThisMonth([{ date: iso, amount: 4200 }])).toBe(4200);
+  });
+});
+
+describe('spentToday', () => {
+  it('sums only the reference day', () => {
+    const ref = new Date('2026-10-20T00:00:00');
+    expect(spentToday(expenses, ref)).toBe(8000); // only e_2 on 10-20
+  });
+  it('defaults to the current day when no ref is passed (dashboard call)', () => {
+    // Regression: dashboard calls spentToday(expenses) with no date.
+    const now = new Date();
+    const iso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    expect(spentToday([{ date: iso, amount: 300 }])).toBe(300);
+  });
 });
 
 describe('vendorPaid', () => {
@@ -71,6 +97,98 @@ describe('vendorPaid', () => {
   });
   it('is 0 for unknown vendor', () => {
     expect(vendorPaid(expenses, 'nope')).toBe(0);
+  });
+});
+
+describe('vendorTotals (vendor-wise bar chart)', () => {
+  const nameOf = (id) => vendors.find((v) => v.id === id)?.name || '';
+  it('sums per vendor, sorted largest-first, with names', () => {
+    const r = vendorTotals(expenses, nameOf);
+    expect(r).toEqual([
+      { vendorId: 'v_1', name: 'Ramesh', total: 250000 },
+      { vendorId: 'v_3', name: 'Bore Co', total: 100000 },
+      { vendorId: 'v_2', name: 'Suresh', total: 8000 },
+    ]);
+  });
+  it('labels missing vendorId as Unknown', () => {
+    const r = vendorTotals([{ amount: 500 }], nameOf);
+    expect(r).toEqual([{ vendorId: '', name: 'Unknown', total: 500 }]);
+  });
+  it('falls back to the id when no resolver is given', () => {
+    const r = vendorTotals([{ vendorId: 'v_9', amount: 10 }]);
+    expect(r).toEqual([{ vendorId: 'v_9', name: 'v_9', total: 10 }]);
+  });
+  it('is empty for no expenses', () => {
+    expect(vendorTotals([])).toEqual([]);
+  });
+});
+
+describe('categoryBudgetRows (Stage/Category budgets)', () => {
+  it('returns rows with spent/balance/pct, sorted by spent desc', () => {
+    const rows = categoryBudgetRows(expenses, { Masonry: 400000, Boring: 100000 });
+    // Masonry spent 250000 (e_1+e_3), Boring 100000, Plumbing 8000 (no budget)
+    expect(rows[0]).toEqual({ category: 'Masonry', budget: 400000, spent: 250000, balance: 150000, pct: 62.5 });
+    const boring = rows.find((r) => r.category === 'Boring');
+    expect(boring).toEqual({ category: 'Boring', budget: 100000, spent: 100000, balance: 0, pct: 100 });
+  });
+  it('includes categories with spend but no budget (budget 0, balance negative of spent)', () => {
+    const rows = categoryBudgetRows(expenses, {});
+    const plumbing = rows.find((r) => r.category === 'Plumbing');
+    expect(plumbing).toEqual({ category: 'Plumbing', budget: 0, spent: 8000, balance: -8000, pct: 0 });
+  });
+  it('caps pct at 100 on overspend but balance goes negative', () => {
+    const rows = categoryBudgetRows([{ category: 'X', amount: 150 }], { X: 100 });
+    expect(rows[0]).toEqual({ category: 'X', budget: 100, spent: 150, balance: -50, pct: 100 });
+  });
+  it('includes budgeted categories with no spend', () => {
+    const rows = categoryBudgetRows([], { Cement: 5000 });
+    expect(rows).toEqual([{ category: 'Cement', budget: 5000, spent: 0, balance: 5000, pct: 0 }]);
+  });
+  it('is empty when no expenses and no budgets', () => {
+    expect(categoryBudgetRows([], {})).toEqual([]);
+  });
+});
+
+describe('paymentModeTotals', () => {
+  const mixed = [
+    { amount: 100, paymentMode: 'Cash' },
+    { amount: 200, paymentMode: 'Online' },
+    { amount: 50, paymentMode: 'Cash' },
+    { amount: 25, paymentMode: '' },
+  ];
+  it('sums amounts per payment mode', () => {
+    expect(paymentModeTotals(mixed)).toEqual({ Cash: 150, Online: 200, Other: 25 });
+  });
+  it('is empty object for no expenses', () => {
+    expect(paymentModeTotals([])).toEqual({});
+  });
+});
+
+describe('monthlyReport', () => {
+  it('groups by month newest-first with count and label', () => {
+    const r = monthlyReport(expenses);
+    expect(r).toEqual([
+      { month: '2026-10', label: 'October 2026', count: 3, total: 308000 },
+      { month: '2026-09', label: 'September 2026', count: 1, total: 50000 },
+    ]);
+  });
+  it('skips blank-date rows', () => {
+    const r = monthlyReport([{ date: '', amount: 999 }, { date: '2026-05-01', amount: 10 }]);
+    expect(r).toEqual([{ month: '2026-05', label: 'May 2026', count: 1, total: 10 }]);
+  });
+  it('is empty for no expenses', () => {
+    expect(monthlyReport([])).toEqual([]);
+  });
+});
+
+describe('filterSortExpenses — reference search', () => {
+  const rows = [
+    { id: 'a', date: '2026-10-01', amount: 10, description: '', category: 'X', vendorId: 'v1', paymentMode: 'Cash', reference: 'UPI-12345' },
+    { id: 'b', date: '2026-10-02', amount: 20, description: 'bricks', category: 'X', vendorId: 'v1', paymentMode: 'Cash', reference: '' },
+  ];
+  it('matches on the reference field', () => {
+    const r = filterSortExpenses(rows, { query: '12345' });
+    expect(r.map((e) => e.id)).toEqual(['a']);
   });
 });
 

@@ -208,4 +208,113 @@ NewENTV/
 
 ---
 
+## 11. v2 Design Addendum — Premium Dashboard
+
+v2 keeps the v1 architecture (static site + Netlify Functions + Blobs + Resend) and the
+pure-logic core, and layers a single-page dashboard UI on top. Added one function
+(`save-settings`) and an additive `settings` field in the blob.
+
+### 11.1 Module map (frontend)
+
+```
+index.html              app shell: sidebar + topbar + <main id="view"> + mobile tabbar
+css/style.css           design tokens (light/dark), components, responsive, motion
+js/app.js               bootstrap: hash router, theme, PIN wiring, nav; subscribes to store
+js/store.js             central state + API calls + PIN; emits to subscribers on change
+js/lib/
+  calc.js               pure math (extended; unit-tested)      ← single source of truth
+  categories.js         stage metadata: id, label, icon, color (frontend constant)
+  seed.js               owner's real 38 expenses + 7 vendors (first-load seed)
+js/ui/                  render-only (data in → HTML/DOM out), no business math
+  icons.js              inline SVG icon set (Lucide-style)
+  components.js         kpiCard, chartCard, badges, toast, confirmDialog, openDrawer…
+  charts.js             Chart.js wrappers (bar/donut/line); destroy-before-recreate
+js/views/               render-only view modules, each reads the store
+  dashboard.js          6 KPIs + 3 charts + recent-5 preview
+  expenses.js           All-Expenses list: search/filter/sort/date-range + edit/delete
+  vendors.js            vendor cards + CRUD drawer (lumpsum balances)
+  settings.js           budget + PIN + theme
+  expense-drawer.js     shared add/edit expense drawer (used by dashboard + expenses)
+```
+
+### 11.2 Data flow (unidirectional)
+
+```
+user action → view handler → store.saveX() → POST /api/* (PIN header)
+            → function read-modify-write blob → returns publicView
+            → store.setState() → emit() → app.js re-renders current view
+```
+
+Views never mutate state directly or do network I/O; they call store actions and re-render
+from `getState()`. `app.js` subscribes once and re-renders the active route on every emit,
+so KPIs and charts update live after any add/edit/delete.
+
+### 11.3 Routing
+
+Hash router (`#/dashboard`, `#/expenses`, `#/vendors`, `#/settings`). On navigation,
+`destroyAllCharts()` runs first to avoid Chart.js canvas leaks, then the matched view
+renders into `#view`. Active nav link gets `.active` + `aria-current="page"`.
+
+### 11.4 Theme
+
+`data-theme` on `<html>` drives the token set. Choice stored in `localStorage` (`cet_theme`);
+`system` (default) removes the key and follows `prefers-color-scheme`, with a live
+`matchMedia` listener. Charts re-read CSS variables on each render, so theme changes recolor
+them automatically.
+
+### 11.5 Backend delta
+
+- **`save-settings.js`** — POST `{ settings: { budget } }`, PIN-gated, validates non-negative
+  number, writes `data.settings.budget`, returns `publicView`.
+- **`_shared.js`** — `loadData()` returns `buildSeed()` on empty blob; backfills
+  `settings`/`seq` for old blobs. `publicView()` includes `settings`.
+- **`add-expense.js`** — email snapshot now includes `budget` + `remaining`
+  (`budgetRemaining`); email still never blocks the save.
+
+### 11.6 Graceful degradation & accessibility
+
+- Chart.js via CDN; if it fails, `chartsAvailable()` is false and the dashboard shows a note
+  instead of charts — totals/tables/forms still work.
+- Focus-trapped drawer + confirm dialog, Esc to close, focus returns to trigger. 44px touch
+  targets, visible focus rings, `prefers-reduced-motion` collapses transitions.
+
+---
+
+## 12. Addendum — GOOD-file parity features (2026-10-28)
+
+### 12.1 Pure logic (`js/lib/calc.js`, TDD)
+- `categoryBudgetRows(expenses, categoryBudgets)` → `[{category, budget, spent, balance, pct}]`
+  sorted by spend; `pct` clamped 0–100, `balance` may be negative. Drives Settings inputs,
+  Dashboard bars, and the Reports category table.
+- `vendorTotals`, `monthlyReport`, `paymentModeTotals` — feed the three Reports tables.
+- `filterSortExpenses` haystack extended to include `reference`.
+
+### 12.2 Backend
+- **`save-settings.js`** — now accepts optional `settings.budget` **and/or**
+  `settings.categoryBudgets` (object of category→number, each validated finite ≥ 0; zero/blank
+  values dropped). Fields are merged independently so saving one never clobbers the other.
+- **`add-expense.js`** — `sanitizeExpense()` adds `reference: String(e.reference||'').trim()`.
+- **`_shared.js`** — `loadData()` backfills `settings.categoryBudgets: {}`; `publicView()` includes
+  it.
+- **`restore-data.js`** (new, PIN-gated) — accepts `{vendors, expenses, settings}`, sanitizes and
+  **replaces** all three wholesale, then resets `seq.vendor`/`seq.expense` past the highest imported
+  `v_N`/`e_N` id so later adds never collide. Returns `publicView`. Keeps the blob authoritative and
+  multi-device (unlike the GOOD file's localStorage restore).
+
+### 12.3 Frontend
+- **`store.js`** — `saveCategoryBudgets(map)`, `exportData()` (client-only snapshot, no secrets/seq),
+  `restoreData(doc)` (→ `restore-data`). State `settings` default now `{budget:0, categoryBudgets:{}}`.
+- **Settings** — "Stage / Category Budgets" card (one number input per category) and a "Data Safety"
+  card (Download backup via `Blob`+`URL.createObjectURL`; Restore via `<input type=file>` → parse →
+  `confirmDialog` → `restoreData`).
+- **Dashboard** — "Budget vs Actual" section rendering `budgetBar()` rows for budgeted categories.
+- **Reports view** (`js/views/reports.js`, route `#/reports`, 5th nav slot) — KPI row + three tables
+  + "Print / Save PDF" (`window.print()`); `@media print` hides sidebar/topbar/tabbar/buttons.
+- **`components.js`** `budgetBar({label, spent, budget, pct})` — track + fill with `.warn`/`.over`
+  state classes.
+- **Expense drawer / table** — optional Reference input; `Ref: …` sub-line; searchable.
+- **Out of scope:** bill-photo upload.
+
+---
+
 *Next: Phase 3 — Code.*

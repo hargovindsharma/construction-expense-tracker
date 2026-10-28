@@ -4,6 +4,10 @@
   publish = "."
   functions = "netlify/functions"
 
+# Build + functions run on Node 20 (resend needs >=18; Node 16 is EOL).
+[build.environment]
+  NODE_VERSION = "20"
+
 # Pretty API paths: /api/get-data -> /.netlify/functions/get-data
 [[redirects]]
   from = "/api/*"

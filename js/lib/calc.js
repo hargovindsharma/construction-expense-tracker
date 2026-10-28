@@ -20,11 +20,11 @@ export function totalSpent(expenses) {
 
 /**
  * Sum of expenses in the same calendar month as `ref` (FR-10).
- * `ref` defaults to a date injected by the caller; tests pass a fixed date.
+ * `ref` defaults to the current date; tests pass a fixed date for determinism.
  * Expense dates are "YYYY-MM-DD" strings.
  */
 export function spentThisMonth(expenses, ref) {
-  const refDate = ref instanceof Date ? ref : new Date(ref);
+  const refDate = ref instanceof Date ? ref : ref != null ? new Date(ref) : new Date();
   const y = refDate.getFullYear();
   const m = refDate.getMonth(); // 0-11
   return (expenses || []).reduce((sum, e) => {
@@ -68,6 +68,152 @@ export function outstandingTotal(vendors, expenses) {
   }, 0);
 }
 
+/** Sum of expenses on the same calendar day as `ref` (defaults to today). */
+export function spentToday(expenses, ref) {
+  const r = ref instanceof Date ? ref : ref != null ? new Date(ref) : new Date();
+  const y = r.getFullYear();
+  const m = r.getMonth();
+  const d = r.getDate();
+  return (expenses || []).reduce((sum, e) => {
+    if (!e.date) return sum;
+    const dt = new Date(e.date + 'T00:00:00');
+    if (dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === d) {
+      return sum + (Number(e.amount) || 0);
+    }
+    return sum;
+  }, 0);
+}
+
+/** Number of recorded transactions. */
+export function transactionCount(expenses) {
+  return (expenses || []).length;
+}
+
+/** Budget minus total spent (may be negative on overspend). */
+export function budgetRemaining(budget, expenses) {
+  return (Number(budget) || 0) - totalSpent(expenses);
+}
+
+/** Percentage of budget consumed, clamped to 0..100. */
+export function budgetUsedPct(budget, expenses) {
+  const b = Number(budget) || 0;
+  if (b <= 0) return 0;
+  return Math.min((totalSpent(expenses) / b) * 100, 100);
+}
+
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * Totals for the last `months` calendar months ending at `ref` (inclusive),
+ * oldest-first. Each entry: { label: 'Oct', year, total }.
+ */
+export function monthlySeries(expenses, months, ref) {
+  const r = ref instanceof Date ? ref : new Date(ref);
+  const buckets = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(r.getFullYear(), r.getMonth() - i, 1);
+    buckets.push({ y: d.getFullYear(), m: d.getMonth(), label: MONTH_LABELS[d.getMonth()], year: d.getFullYear(), total: 0 });
+  }
+  for (const e of expenses || []) {
+    if (!e.date) continue;
+    const dt = new Date(e.date + 'T00:00:00');
+    const b = buckets.find((x) => x.y === dt.getFullYear() && x.m === dt.getMonth());
+    if (b) b.total += Number(e.amount) || 0;
+  }
+  return buckets.map(({ label, year, total }) => ({ label, year, total }));
+}
+
+/**
+ * Current month vs previous month totals and trend.
+ * Returns { current, previous, deltaPct, direction: 'up'|'down'|'flat' }.
+ */
+export function trendVsPrevious(expenses, ref) {
+  const r = ref instanceof Date ? ref : new Date(ref);
+  const cur = new Date(r.getFullYear(), r.getMonth(), 1);
+  const prev = new Date(r.getFullYear(), r.getMonth() - 1, 1);
+  const sumMonth = (y, m) =>
+    (expenses || []).reduce((s, e) => {
+      if (!e.date) return s;
+      const dt = new Date(e.date + 'T00:00:00');
+      return dt.getFullYear() === y && dt.getMonth() === m ? s + (Number(e.amount) || 0) : s;
+    }, 0);
+  const current = sumMonth(cur.getFullYear(), cur.getMonth());
+  const previous = sumMonth(prev.getFullYear(), prev.getMonth());
+  let deltaPct;
+  if (previous === 0) deltaPct = current === 0 ? 0 : 100;
+  else deltaPct = Math.round(((current - previous) / previous) * 100);
+  const direction = current > previous ? 'up' : current < previous ? 'down' : 'flat';
+  return { current, previous, deltaPct, direction };
+}
+
+/**
+ * Total paid to each vendor, as a sorted (largest-first) array.
+ * Each entry: { vendorId, name, total }. Used by the vendor-wise bar chart.
+ * `vendorName` is an optional (id)=>name resolver; unknown ids fall back to
+ * the id string, or 'Unknown' when the expense has no vendorId.
+ */
+export function vendorTotals(expenses, vendorName) {
+  const nameOf = vendorName || (() => '');
+  const totals = new Map();
+  for (const e of expenses || []) {
+    const id = e.vendorId || '';
+    totals.set(id, (totals.get(id) || 0) + (Number(e.amount) || 0));
+  }
+  return [...totals.entries()]
+    .map(([vendorId, total]) => ({
+      vendorId,
+      name: nameOf(vendorId) || vendorId || 'Unknown',
+      total,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+/** Category totals as a sorted array with percentages (for the donut). */
+export function categoryBreakdown(expenses) {
+  const totals = categoryTotals(expenses);
+  const grand = totalSpent(expenses);  return Object.entries(totals)
+    .map(([category, total]) => ({
+      category,
+      total,
+      pct: grand > 0 ? (total / grand) * 100 : 0,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+/**
+ * Pure search / filter / sort for the All-Expenses view (keeps logic out of UI).
+ * opts: { query, category, from, to, sortBy: 'date'|'amount'|'vendor', dir: 'asc'|'desc', vendorName }
+ * `vendorName` optional (id)=>name used for query matching + vendor sort.
+ */
+export function filterSortExpenses(expenses, opts = {}) {
+  const { query = '', category = '', from = '', to = '', sortBy = 'date', dir = 'desc', vendorName } = opts;
+  const nameOf = vendorName || (() => '');
+  const q = String(query).trim().toLowerCase();
+
+  let rows = (expenses || []).filter((e) => {
+    if (category && e.category !== category) return false;
+    if (from && e.date < from) return false;
+    if (to && e.date > to) return false;
+    if (q) {
+      const hay = `${e.description || ''} ${e.category || ''} ${nameOf(e.vendorId) || ''} ${e.paymentMode || ''} ${e.reference || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const mul = dir === 'asc' ? 1 : -1;
+  rows = [...rows].sort((a, b) => {
+    let ka, kb;
+    if (sortBy === 'amount') { ka = Number(a.amount) || 0; kb = Number(b.amount) || 0; }
+    else if (sortBy === 'vendor') { ka = nameOf(a.vendorId) || ''; kb = nameOf(b.vendorId) || ''; }
+    else { ka = a.createdAt || a.date || ''; kb = b.createdAt || b.date || ''; }
+    if (ka < kb) return -1 * mul;
+    if (ka > kb) return 1 * mul;
+    return 0;
+  });
+  return rows;
+}
+
 /** Group expenses by category, returning { category: totalAmount } (FR-13). */
 export function categoryTotals(expenses) {
   const out = {};
@@ -76,6 +222,64 @@ export function categoryTotals(expenses) {
     out[cat] = (out[cat] || 0) + (Number(e.amount) || 0);
   }
   return out;
+}
+
+/**
+ * Budget-vs-actual rows per category (Stage/Category budgets).
+ * Merges spend (from categoryTotals) with the per-category budget map; returns
+ * `[{ category, budget, spent, balance, pct }]` sorted by spend (largest first).
+ * `pct` is clamped 0..100 for progress bars; `balance` (budget - spent) may go
+ * negative on overspend. Categories appear if they have any spend OR any budget.
+ */
+export function categoryBudgetRows(expenses, categoryBudgets) {
+  const budgets = categoryBudgets || {};
+  const spentByCat = categoryTotals(expenses);
+  const cats = new Set([...Object.keys(spentByCat), ...Object.keys(budgets)]);
+  return [...cats]
+    .map((category) => {
+      const budget = Number(budgets[category]) || 0;
+      const spent = Number(spentByCat[category]) || 0;
+      const pct = budget > 0 ? Math.min((spent / budget) * 100, 100) : 0;
+      return { category, budget, spent, balance: budget - spent, pct };
+    })
+    .sort((a, b) => b.spent - a.spent);
+}
+
+/** Sum of expense amounts per payment mode; blank/unknown modes bucket as 'Other'. */
+export function paymentModeTotals(expenses) {
+  const out = {};
+  for (const e of expenses || []) {
+    const mode = e.paymentMode || 'Other';
+    out[mode] = (out[mode] || 0) + (Number(e.amount) || 0);
+  }
+  return out;
+}
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/**
+ * Per-month spending report, newest-first. Each entry:
+ * `{ month: 'YYYY-MM', label: 'August 2026', count, total }`.
+ * Blank-date expenses are skipped (they can't be bucketed by month).
+ */
+export function monthlyReport(expenses) {
+  const buckets = new Map();
+  for (const e of expenses || []) {
+    if (!e.date) continue;
+    const month = String(e.date).slice(0, 7); // YYYY-MM
+    if (!/^\d{4}-\d{2}$/.test(month)) continue;
+    const b = buckets.get(month) || { month, count: 0, total: 0 };
+    b.count += 1;
+    b.total += Number(e.amount) || 0;
+    buckets.set(month, b);
+  }
+  return [...buckets.values()]
+    .sort((a, b) => (a.month < b.month ? 1 : a.month > b.month ? -1 : 0))
+    .map((b) => {
+      const mi = Number(b.month.slice(5, 7)) - 1;
+      const yr = b.month.slice(0, 4);
+      return { ...b, label: `${MONTH_NAMES[mi] || b.month} ${yr}` };
+    });
 }
 
 /**
@@ -163,6 +367,18 @@ export function buildEmailHtml({ expense, vendor, snapshot, last5, vendorName })
           snapshot.outstanding
         )}</b></td>
       </tr>
+      ${
+        snapshot.budget
+          ? `<tr>
+        <td style="padding:10px 12px;">Budget</td>
+        <td style="padding:10px 12px;text-align:right;"><b>${formatINR(snapshot.budget)}</b></td>
+        <td style="padding:10px 12px;">Remaining</td>
+        <td style="padding:10px 12px;text-align:right;"><b style="color:${
+          snapshot.remaining < 0 ? '#dc2626' : '#059669'
+        };">${formatINR(snapshot.remaining)}</b></td>
+      </tr>`
+          : ''
+      }
     </table>
 
     <h3 style="margin:0 0 8px;">Last ${Math.min((last5 || []).length, 5)} entries</h3>

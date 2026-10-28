@@ -151,4 +151,81 @@ mode, payment integration, multi-project support, data export (may be future wor
 
 ---
 
+## 9. v2 Addendum — Premium Dashboard (2026-10-28)
+
+The v1 requirements above remain valid. v2 adds a richer UI and a few new
+capabilities. Nothing in the backend contract (Blobs storage, PIN gate, email) changed
+behaviorally; the additions are additive and backward-compatible.
+
+### New / changed functional requirements
+- **FR-19 — Category as a first-class "stage".** Expenses are classified by construction
+  stage with an icon + color: Demolition Work, Boring Labor, Boring Material, Construction
+  Labor, Building Material, Sariya & Taar (Steel), plus Cement, Electrical, Plumbing,
+  Transportation, Equipment, Food, Miscellaneous. Category metadata (icon/color) is a
+  **frontend constant** (`js/lib/categories.js`), never stored in the blob.
+- **FR-20 — Payment modes extended.** Accepted modes now include the owner's historical
+  values: `Cash`, `UPI`, `Bank`, `Online`, `Other`.
+- **FR-21 — Project budget.** A settable total project budget is stored in the blob
+  (`settings.budget`, default 0) via a new PIN-gated `save-settings` function. Drives the
+  Remaining-Budget KPI and progress ring; overspend is shown in red.
+- **FR-22 — Dashboard KPIs (6).** Total Expenses · This Month (with trend vs last month) ·
+  Today · Remaining Budget (ring; red on overspend) · Transactions · Trend vs last month.
+- **FR-23 — Interactive charts.** Monthly bar, Category donut (legend), Spending-trend line
+  (Chart.js via CDN). Redraw on every data mutation and on theme change. If Chart.js fails
+  to load, the rest of the app still works (graceful degradation).
+- **FR-24 — All-Expenses view.** A full list of every expense (not just recent) with
+  debounced search, category filter chips, date-range, sortable columns (date/amount/vendor),
+  category badges, payment-mode chips, and per-row Edit + Delete with a confirm dialog.
+  Dashboard shows a recent-5 preview that links here.
+- **FR-25 — Add/Edit drawer.** A focus-trapped side drawer (bottom sheet on mobile) for
+  adding/editing expenses, with inline validation and category chips; opens from any view.
+- **FR-26 — Seed on first load.** On an empty blob the store is seeded with the owner's real
+  38 expenses + 7 vendors (`js/lib/seed.js`). After the first write the live blob is
+  authoritative and the seed is never used again. The one dateless row is seeded with a
+  placeholder date and a "⚠ DATE UNVERIFIED" note for the owner to edit.
+- **FR-27 — Theme.** Light / Dark / System themes; the explicit choice persists in
+  `localStorage`; System follows `prefers-color-scheme`.
+
+### New non-functional requirements
+- **NFR-9 — Responsive.** Works phone → tablet → laptop → desktop (breakpoints 420/768/1024);
+  sidebar collapses to a bottom tab bar + hamburger on mobile.
+- **NFR-10 — Accessibility.** 44px touch targets, visible focus rings, focus-trapped
+  dialogs/drawers, `aria-current` on active nav, `prefers-reduced-motion` honored.
+- **NFR-11 — Separation of concerns.** All math stays in `calc.js`/`categories.js`; `js/ui/*`
+  and `js/views/*` are render-only (data in → HTML/DOM out).
+
+### Data model change (additive)
+`settings: { budget: number }` added to the blob document. `loadData()` backfills
+`{ budget: 0 }` for older blobs; `publicView()` includes `settings`. No migration needed.
+
+---
+
+## Addendum — GOOD-file parity features (2026-10-28)
+
+Added to reach parity with the owner's single-file tracker. All additive; **no data migration**.
+
+- **FR-28 — Category budgets.** Per-category budget targets (the existing `CATEGORIES` act as
+  "stages"). Stored as `settings.categoryBudgets: { "<categoryId>": number }`. Set in Settings;
+  the Dashboard shows a **Budget vs Actual** progress bar per budgeted category (green → amber at
+  ≥85% → red when overspent). Decision: budgets map onto existing categories, **not** a new
+  hierarchical Stage entity.
+- **FR-29 — Reference / transaction ID.** Each expense gains an optional `reference` string
+  (UPI ref, cheque no., etc.). Shown as a `Ref: …` sub-line in the Expenses table and included in
+  search. Old expenses read as `''`.
+- **FR-30 — Reports + Print/PDF.** A Reports view with a KPI summary and three tables — Category
+  report (budget/spent/balance), Vendor report (total paid), Monthly spending (count + total) —
+  plus a **Print / Save PDF** button (`window.print()` + an `@media print` block that hides app
+  chrome).
+- **FR-31 — Backup / Restore (JSON).** Download a full backup (`{vendors, expenses, settings,
+  exportedAt}` — **no PIN, no internal seq**) and restore from a JSON file. Restore is PIN-gated
+  server-side, replaces data wholesale for **all devices**, and resets `seq` past imported ids.
+- **Out of scope:** bill-photo upload (owner: "image is not needed").
+
+### Data model changes (additive)
+- `settings.categoryBudgets: {}` — backfilled by `loadData()`, included in `publicView()`,
+  present in the seed.
+- `expense.reference: string` — sanitized in `add-expense.js`; absent on old rows → `''`.
+
+---
+
 *Next: Phase 2 — Design (`docs/02-design.md`).*

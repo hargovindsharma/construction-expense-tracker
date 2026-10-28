@@ -1,25 +1,35 @@
 // netlify/functions/_shared.js
 // Small helpers shared by the write functions. Kept tiny and dependency-light.
 import { getStore } from '@netlify/blobs';
+import { buildSeed } from '../../js/lib/seed.js';
 
 export const STORE_NAME = 'expenses';
 export const DATA_KEY = 'data.json';
-
-const EMPTY = { vendors: [], expenses: [], seq: { vendor: 0, expense: 0 } };
 
 /** Open the Blobs store. */
 export function store() {
   return getStore(STORE_NAME);
 }
 
-/** Load the data document, seeding an empty one if absent. */
+/**
+ * Load the data document. On the very first load (no blob yet) we seed the
+ * store with the owner's real historical data (see js/lib/seed.js). After any
+ * write the live blob is authoritative and the seed is never used again.
+ */
 export async function loadData(s) {
   const data = await s.get(DATA_KEY, { type: 'json' });
-  if (!data) return structuredClone(EMPTY);
-  // Backfill shape in case an older blob is missing fields.
+  if (!data) return buildSeed();
+  // Backfill shape in case an older blob is missing newer fields.
   return {
     vendors: Array.isArray(data.vendors) ? data.vendors : [],
     expenses: Array.isArray(data.expenses) ? data.expenses : [],
+    settings: {
+      budget: Number(data.settings?.budget) || 0,
+      categoryBudgets:
+        data.settings?.categoryBudgets && typeof data.settings.categoryBudgets === 'object'
+          ? data.settings.categoryBudgets
+          : {},
+    },
     seq: {
       vendor: Number(data.seq?.vendor) || 0,
       expense: Number(data.seq?.expense) || 0,
@@ -34,7 +44,14 @@ export async function saveData(s, data) {
 
 /** Public projection (never leak internal seq counters). */
 export function publicView(data) {
-  return { vendors: data.vendors, expenses: data.expenses };
+  return {
+    vendors: data.vendors,
+    expenses: data.expenses,
+    settings: {
+      budget: data.settings?.budget || 0,
+      categoryBudgets: data.settings?.categoryBudgets || {},
+    },
+  };
 }
 
 /** JSON Response helper. */

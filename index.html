@@ -1,168 +1,75 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="en" data-theme="light">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#4f46e5" />
   <title>Construction Expense Tracker</title>
+  <meta name="description" content="Track and update construction expenses from any device." />
+
+  <!-- Fonts (Plus Jakarta Sans) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Chart.js (optional; app degrades gracefully if it fails to load) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
+
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <header class="app-header">
-    <h1>🏗️ Construction Expense Tracker</h1>
-    <div class="pin-bar">
-      <label for="pin">PIN</label>
-      <input id="pin" type="password" inputmode="numeric" autocomplete="off"
-             placeholder="enter to save" />
-      <span id="pin-state" class="pin-state"></span>
-    </div>
-  </header>
+  <div class="app-shell">
+    <!-- Sidebar (desktop) -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20"/><path d="M4 20V8l8-5 8 5v12"/><path d="M9 20v-6h6v6"/></svg>
+        </span>
+        <span class="brand-name">BuildLedger</span>
+      </div>
+      <nav class="nav" aria-label="Primary">
+        <a class="nav-link" href="#/dashboard" data-route="dashboard"></a>
+        <a class="nav-link" href="#/expenses" data-route="expenses"></a>
+        <a class="nav-link" href="#/vendors" data-route="vendors"></a>
+        <a class="nav-link" href="#/reports" data-route="reports"></a>
+        <a class="nav-link" href="#/settings" data-route="settings"></a>
+      </nav>
+      <div class="sidebar-foot">
+        <span class="muted small">Stored on Netlify · email on each expense</span>
+      </div>
+    </aside>
 
-  <main class="container">
-    <!-- Message / toast area -->
-    <div id="message" class="message" hidden></div>
+    <!-- Backdrop for mobile sidebar -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
-    <!-- KPI cards -->
-    <section class="kpis" aria-label="Summary">
-      <div class="card kpi"><span class="kpi-label">Total Spent</span>
-        <span class="kpi-value" id="kpi-total">₹0</span></div>
-      <div class="card kpi"><span class="kpi-label">This Month</span>
-        <span class="kpi-value" id="kpi-month">₹0</span></div>
-      <div class="card kpi"><span class="kpi-label">Vendors</span>
-        <span class="kpi-value" id="kpi-vendors">0</span></div>
-      <div class="card kpi"><span class="kpi-label">Outstanding</span>
-        <span class="kpi-value" id="kpi-outstanding">₹0</span></div>
-    </section>
-
-    <!-- Add Expense (primary) -->
-    <section class="card">
-      <h2>➕ Add Expense</h2>
-      <form id="expense-form" class="grid">
-        <input type="hidden" id="exp-id" />
-        <label>Vendor
-          <select id="exp-vendor" required></select>
-        </label>
-        <label>Amount (₹)
-          <input id="exp-amount" type="number" min="1" step="1" required />
-        </label>
-        <label>Date
-          <input id="exp-date" type="date" required />
-        </label>
-        <label>Category
-          <input id="exp-category" type="text" placeholder="auto from vendor" />
-        </label>
-        <label>Payment
-          <select id="exp-mode">
-            <option value="UPI">UPI</option>
-            <option value="cash">Cash</option>
-            <option value="bank">Bank</option>
-          </select>
-        </label>
-        <label class="full">Note
-          <input id="exp-desc" type="text" placeholder="optional" />
-        </label>
-        <div class="actions full">
-          <button type="submit" class="btn primary" id="exp-submit">Add Expense</button>
-          <button type="button" class="btn ghost" id="exp-cancel" hidden>Cancel edit</button>
+    <!-- Main column -->
+    <div class="main-col">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menu-btn" aria-label="Open menu">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+        <h1 class="topbar-title" id="topbar-title">Dashboard</h1>
+        <div class="topbar-actions">
+          <button class="icon-btn" id="theme-btn" aria-label="Toggle theme"></button>
+          <button class="btn primary" id="add-expense-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            <span class="btn-label">Add Expense</span>
+          </button>
         </div>
-      </form>
-    </section>
+      </header>
 
-    <!-- Add / Manage Vendor -->
-    <section class="card">
-      <details id="vendor-panel">
-        <summary><h2 class="inline">➕ Add / Manage Vendor</h2></summary>
-        <form id="vendor-form" class="grid">
-          <input type="hidden" id="ven-id" />
-          <label>Name
-            <input id="ven-name" type="text" required />
-          </label>
-          <label>Category
-            <input id="ven-category" type="text" list="cat-list" required
-                   placeholder="Masonry, Plumbing…" />
-            <datalist id="cat-list">
-              <option>Demolition</option><option>Boring</option><option>Masonry</option>
-              <option>Plumbing</option><option>Electrical</option><option>Painting</option>
-              <option>Carpentry</option><option>Material</option><option>Labour</option>
-            </datalist>
-          </label>
-          <label>Rate type
-            <select id="ven-ratetype">
-              <option value="lumpsum">Lumpsum (total)</option>
-              <option value="per_sqft">Per sq.ft</option>
-              <option value="daily">Daily</option>
-              <option value="hourly">Hourly</option>
-            </select>
-          </label>
-          <label>Rate value (₹)
-            <input id="ven-ratevalue" type="number" min="0" step="1" placeholder="0" />
-          </label>
-          <label>Agreed total (₹) <small>lumpsum</small>
-            <input id="ven-agreed" type="number" min="0" step="1" placeholder="0" />
-          </label>
-          <label>Phone
-            <input id="ven-phone" type="tel" placeholder="optional" />
-          </label>
-          <label>Status
-            <select id="ven-status">
-              <option value="active">Active</option>
-              <option value="done">Done</option>
-            </select>
-          </label>
-          <label class="full">Notes
-            <input id="ven-notes" type="text" placeholder="optional" />
-          </label>
-          <div class="actions full">
-            <button type="submit" class="btn primary" id="ven-submit">Add Vendor</button>
-            <button type="button" class="btn ghost" id="ven-cancel" hidden>Cancel edit</button>
-          </div>
-        </form>
-      </details>
-    </section>
+      <main class="view" id="view" tabindex="-1"></main>
+    </div>
 
-    <!-- Vendor Summary -->
-    <section class="card">
-      <h2>Vendor Summary</h2>
-      <div class="table-wrap">
-        <table id="vendor-table">
-          <thead>
-            <tr><th>Vendor</th><th>Category</th><th>Rate</th><th>Agreed</th>
-                <th>Paid</th><th>Balance</th><th>Progress</th><th></th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <p class="empty" id="vendor-empty" hidden>No vendors yet. Add one above.</p>
-    </section>
-
-    <!-- Spend by Category -->
-    <section class="card">
-      <h2>Spend by Category</h2>
-      <div id="category-bars" class="bars"></div>
-      <p class="empty" id="category-empty" hidden>No expenses yet.</p>
-    </section>
-
-    <!-- Recent Expenses -->
-    <section class="card">
-      <div class="row-between">
-        <h2>Recent Expenses</h2>
-        <label class="filter">Filter
-          <select id="filter-vendor"><option value="">All vendors</option></select>
-        </label>
-      </div>
-      <div class="table-wrap">
-        <table id="expense-table">
-          <thead>
-            <tr><th>Date</th><th>Vendor</th><th>Category</th><th>Mode</th>
-                <th class="right">Amount</th><th></th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <p class="empty" id="expense-empty" hidden>No expenses yet.</p>
-    </section>
-
-    <footer class="foot">Data stored on Netlify · emails on each new expense</footer>
-  </main>
+    <!-- Mobile bottom nav -->
+    <nav class="tabbar" aria-label="Primary mobile">
+      <a class="tab" href="#/dashboard" data-route="dashboard"></a>
+      <a class="tab" href="#/expenses" data-route="expenses"></a>
+      <a class="tab" href="#/vendors" data-route="vendors"></a>
+      <a class="tab" href="#/reports" data-route="reports"></a>
+      <a class="tab" href="#/settings" data-route="settings"></a>
+    </nav>
+  </div>
 
   <script type="module" src="js/app.js"></script>
 </body>
