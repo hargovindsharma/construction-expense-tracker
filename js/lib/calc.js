@@ -395,7 +395,7 @@ export function buildEmailHtml({ expense, vendor, snapshot, last5, vendorName })
     </table>
 
     <p style="margin:16px 0 0;color:#999;font-size:12px;">
-      Sent automatically by Construction Expense Tracker.
+      Sent automatically by Kamal Kunj Expense Tracker.
     </p>
   </div>`;
 }

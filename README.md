@@ -1,4 +1,4 @@
-# 🏗️ Construction Expense Tracker
+# 🏗️ Kamal Kunj Expense Tracker
 
 A single-page web app to track construction project expenses **from any device**, with an
 **email sent to you on every expense** (snapshot + last 5 entries). Free to host on Netlify.
