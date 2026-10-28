@@ -1,0 +1,19 @@
+{
+  "name": "construction-expense-tracker",
+  "version": "1.0.0",
+  "description": "Single-page construction expense tracker on Netlify (Blobs + Resend). No database.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "netlify dev",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0",
+    "resend": "^4.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.0"
+  }
+}

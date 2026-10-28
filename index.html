@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Construction Expense Tracker</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>🏗️ Construction Expense Tracker</h1>
+    <div class="pin-bar">
+      <label for="pin">PIN</label>
+      <input id="pin" type="password" inputmode="numeric" autocomplete="off"
+             placeholder="enter to save" />
+      <span id="pin-state" class="pin-state"></span>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Message / toast area -->
+    <div id="message" class="message" hidden></div>
+
+    <!-- KPI cards -->
+    <section class="kpis" aria-label="Summary">
+      <div class="card kpi"><span class="kpi-label">Total Spent</span>
+        <span class="kpi-value" id="kpi-total">₹0</span></div>
+      <div class="card kpi"><span class="kpi-label">This Month</span>
+        <span class="kpi-value" id="kpi-month">₹0</span></div>
+      <div class="card kpi"><span class="kpi-label">Vendors</span>
+        <span class="kpi-value" id="kpi-vendors">0</span></div>
+      <div class="card kpi"><span class="kpi-label">Outstanding</span>
+        <span class="kpi-value" id="kpi-outstanding">₹0</span></div>
+    </section>
+
+    <!-- Add Expense (primary) -->
+    <section class="card">
+      <h2>➕ Add Expense</h2>
+      <form id="expense-form" class="grid">
+        <input type="hidden" id="exp-id" />
+        <label>Vendor
+          <select id="exp-vendor" required></select>
+        </label>
+        <label>Amount (₹)
+          <input id="exp-amount" type="number" min="1" step="1" required />
+        </label>
+        <label>Date
+          <input id="exp-date" type="date" required />
+        </label>
+        <label>Category
+          <input id="exp-category" type="text" placeholder="auto from vendor" />
+        </label>
+        <label>Payment
+          <select id="exp-mode">
+            <option value="UPI">UPI</option>
+            <option value="cash">Cash</option>
+            <option value="bank">Bank</option>
+          </select>
+        </label>
+        <label class="full">Note
+          <input id="exp-desc" type="text" placeholder="optional" />
+        </label>
+        <div class="actions full">
+          <button type="submit" class="btn primary" id="exp-submit">Add Expense</button>
+          <button type="button" class="btn ghost" id="exp-cancel" hidden>Cancel edit</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Add / Manage Vendor -->
+    <section class="card">
+      <details id="vendor-panel">
+        <summary><h2 class="inline">➕ Add / Manage Vendor</h2></summary>
+        <form id="vendor-form" class="grid">
+          <input type="hidden" id="ven-id" />
+          <label>Name
+            <input id="ven-name" type="text" required />
+          </label>
+          <label>Category
+            <input id="ven-category" type="text" list="cat-list" required
+                   placeholder="Masonry, Plumbing…" />
+            <datalist id="cat-list">
+              <option>Demolition</option><option>Boring</option><option>Masonry</option>
+              <option>Plumbing</option><option>Electrical</option><option>Painting</option>
+              <option>Carpentry</option><option>Material</option><option>Labour</option>
+            </datalist>
+          </label>
+          <label>Rate type
+            <select id="ven-ratetype">
+              <option value="lumpsum">Lumpsum (total)</option>
+              <option value="per_sqft">Per sq.ft</option>
+              <option value="daily">Daily</option>
+              <option value="hourly">Hourly</option>
+            </select>
+          </label>
+          <label>Rate value (₹)
+            <input id="ven-ratevalue" type="number" min="0" step="1" placeholder="0" />
+          </label>
+          <label>Agreed total (₹) <small>lumpsum</small>
+            <input id="ven-agreed" type="number" min="0" step="1" placeholder="0" />
+          </label>
+          <label>Phone
+            <input id="ven-phone" type="tel" placeholder="optional" />
+          </label>
+          <label>Status
+            <select id="ven-status">
+              <option value="active">Active</option>
+              <option value="done">Done</option>
+            </select>
+          </label>
+          <label class="full">Notes
+            <input id="ven-notes" type="text" placeholder="optional" />
+          </label>
+          <div class="actions full">
+            <button type="submit" class="btn primary" id="ven-submit">Add Vendor</button>
+            <button type="button" class="btn ghost" id="ven-cancel" hidden>Cancel edit</button>
+          </div>
+        </form>
+      </details>
+    </section>
+
+    <!-- Vendor Summary -->
+    <section class="card">
+      <h2>Vendor Summary</h2>
+      <div class="table-wrap">
+        <table id="vendor-table">
+          <thead>
+            <tr><th>Vendor</th><th>Category</th><th>Rate</th><th>Agreed</th>
+                <th>Paid</th><th>Balance</th><th>Progress</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="empty" id="vendor-empty" hidden>No vendors yet. Add one above.</p>
+    </section>
+
+    <!-- Spend by Category -->
+    <section class="card">
+      <h2>Spend by Category</h2>
+      <div id="category-bars" class="bars"></div>
+      <p class="empty" id="category-empty" hidden>No expenses yet.</p>
+    </section>
+
+    <!-- Recent Expenses -->
+    <section class="card">
+      <div class="row-between">
+        <h2>Recent Expenses</h2>
+        <label class="filter">Filter
+          <select id="filter-vendor"><option value="">All vendors</option></select>
+        </label>
+      </div>
+      <div class="table-wrap">
+        <table id="expense-table">
+          <thead>
+            <tr><th>Date</th><th>Vendor</th><th>Category</th><th>Mode</th>
+                <th class="right">Amount</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="empty" id="expense-empty" hidden>No expenses yet.</p>
+    </section>
+
+    <footer class="foot">Data stored on Netlify · emails on each new expense</footer>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

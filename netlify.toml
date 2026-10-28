@@ -1,0 +1,11 @@
+# netlify.toml — Construction Expense Tracker
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+# Pretty API paths: /api/get-data -> /.netlify/functions/get-data
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
